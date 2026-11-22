@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>GG — Glitch Game</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<style>
+  /* ---------- EDIT YOUR VIDEOS HERE (see the PAIRS list in the script below) ---------- */
+  :root{
+    --lightbox:#E4E7EC;   /* cool grey, like a viewing lightbox */
+    --ink:#18202E;        /* deep blue-black for text */
+    --muted:#5E6878;
+    --signal:#2F55F5;     /* blue for the active choice */
+    --right:#17A558;
+    --wrong:#E2342A;
+    --frame:#FFFFFF;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--lightbox);
+    color:var(--ink);
+    font-family:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    overflow:hidden;
+    -webkit-font-smoothing:antialiased;
+  }
+  button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+  :focus-visible{outline:3px solid var(--signal);outline-offset:4px}
+
+  .screen{position:fixed;inset:0;display:none;flex-direction:column}
+  .screen.on{display:flex}
+
+  /* ---------- start + end screens ---------- */
+  .title-screen{align-items:center;justify-content:center;text-align:center;padding:4vh 6vw;gap:3.5vh}
+  .wordmark{
+    font-weight:800;font-size:clamp(4rem,16vw,15rem);line-height:.82;letter-spacing:-.045em;
+    position:relative;display:inline-block;
+  }
+  /* the one "glitch" moment: an RGB split that twitches every few seconds */
+  .wordmark::before,.wordmark::after{
+    content:attr(data-text);position:absolute;inset:0;mix-blend-mode:multiply;pointer-events:none;
+  }
+  .wordmark::before{color:#00B7FF;animation:twitchA 4.2s infinite steps(1)}
+  .wordmark::after{color:#FF2A6D;animation:twitchB 4.2s infinite steps(1)}
+  @keyframes twitchA{0%,86%,100%{transform:none;clip-path:inset(0 0 0 0);opacity:0}
+    88%{transform:translate(-.06em,.01em);clip-path:inset(20% 0 55% 0);opacity:1}
+    91%{transform:translate(.04em,0);clip-path:inset(60% 0 10% 0);opacity:1}
+    94%{opacity:0}}
+  @keyframes twitchB{0%,86%,100%{transform:none;opacity:0}
+    88%{transform:translate(.05em,-.01em);clip-path:inset(50% 0 25% 0);opacity:1}
+    92%{transform:translate(-.03em,0);clip-path:inset(5% 0 70% 0);opacity:1}
+    95%{opacity:0}}
+  .lede{font-size:clamp(1.1rem,1.8vw,1.5rem);line-height:1.45;max-width:34ch;color:var(--muted)}
+  .big-btn{
+    background:var(--ink);color:var(--lightbox);font-weight:600;
+    font-size:clamp(1.1rem,1.6vw,1.4rem);padding:1rem 2.4rem;border-radius:999px;
+    transition:transform .15s ease, background .15s ease;
+  }
+  .big-btn:hover{background:var(--signal)}
+  .big-btn:active{transform:scale(.97)}
+  .hint{font-size:.95rem;color:var(--muted)}
+  .final-score{font-weight:800;font-size:clamp(5rem,18vw,14rem);line-height:.9;letter-spacing:-.04em}
+  .final-score small{font-size:.35em;color:var(--muted);font-weight:600;letter-spacing:-.01em}
+
+  /* ---------- game screen ---------- */
+  /* videos fill the entire screen; everything else floats on top */
+  .game{background:#000}
+  .pair{position:fixed;inset:0;display:grid;grid-template-columns:1fr 1fr;gap:4px;background:#000}
+  .card{position:relative;min-height:0;display:flex;text-align:left}
+  .card .screenbox{position:relative;flex:1;min-height:0;background:#000;overflow:hidden}
+  .card video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
+  .card .caption{display:none}
+  /* selection outline drawn inside the video edge */
+  .card .screenbox::after{
+    content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
+    box-shadow:inset 0 0 0 0 transparent;transition:box-shadow .18s ease;
+  }
+  .card:hover .screenbox::after{box-shadow:inset 0 0 0 6px rgba(255,255,255,.55)}
+  .card.pick-real .screenbox::after{box-shadow:inset 0 0 0 12px var(--signal)}
+  .card.pick-fake .screenbox::after{box-shadow:inset 0 0 0 12px #fff}
+
+  .topbar{
+    position:fixed;top:0;left:0;right:0;z-index:5;pointer-events:none;
+    display:flex;justify-content:space-between;padding:1.6vh 2vw;
+    font-size:1.05rem;color:rgba(255,255,255,.85);text-shadow:0 1px 6px rgba(0,0,0,.7);
+  }
+  .topbar strong{color:#fff;font-weight:600}
+  .prompt{
+    position:fixed;top:2.4vh;left:50%;transform:translateX(-50%);z-index:5;pointer-events:none;
+    max-width:62vw;text-align:center;
+    background:rgba(24,32,46,.84);color:#fff;border-radius:22px;padding:.45em .9em .5em;
+    font-weight:800;font-size:clamp(1.6rem,3.4vw,3.4rem);line-height:1;letter-spacing:-.025em;
+    backdrop-filter:blur(6px);
+  }
+  .prompt .step{display:block;font-size:.36em;font-weight:600;letter-spacing:0;color:rgba(255,255,255,.7);margin-bottom:.4em}
+  .tag{
+    position:absolute;top:14px;left:14px;z-index:2;
+    background:var(--signal);color:#fff;font-weight:600;font-size:1rem;
+    padding:.35rem .85rem;border-radius:999px;display:none;
+  }
+  .card.pick-real .tag.you{display:block}
+  .card.pick-fake .tag.you{display:block;background:#fff;color:var(--ink)}
+  .tag{top:auto;bottom:22px;left:22px}
+  .tag.truth{top:50%;bottom:auto;left:50%;transform:translate(-50%,-50%);white-space:nowrap;
+    font-size:clamp(1.4rem,3vw,2.8rem);font-weight:800;padding:.4em 1.1em;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+  .revealed .tag.truth{display:block}
+  .tag.truth.is-real{background:#fff;color:var(--ink)}
+  .tag.truth.is-fake{background:#FF2A6D;color:#fff}
+  .locked .card{pointer-events:none}
+
+  .footer{position:fixed;left:0;right:0;bottom:16vh;z-index:5;display:flex;justify-content:center;pointer-events:none}
+  .footer .big-btn{display:none;pointer-events:auto;background:#fff;color:var(--ink);box-shadow:0 6px 24px rgba(0,0,0,.4)}
+  .footer .big-btn:hover{background:var(--signal);color:#fff}
+  .footer.show .big-btn{display:inline-block}
+
+  /* ---------- full-screen result flood ---------- */
+  .flood{
+    position:fixed;inset:0;z-index:50;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;color:#fff;gap:2vh;pointer-events:none;opacity:0;
+  }
+  .flood.right{background:var(--right)}
+  .flood.wrong{background:var(--wrong)}
+  .flood.go{animation:flood 2.1s ease forwards}
+  @keyframes flood{
+    0%{opacity:0}
+    8%{opacity:1}
+    70%{opacity:1}
+    100%{opacity:0}
+  }
+  .flood h2{font-weight:800;font-size:clamp(4rem,14vw,12rem);line-height:.85;letter-spacing:-.045em}
+  .flood p{font-size:clamp(1.2rem,2.2vw,2rem);font-weight:600;max-width:30ch}
+  /* after the flood fades, the page keeps a coloured edge so you still see the verdict */
+  body.was-right::after,body.was-wrong::after{
+    content:"";position:fixed;inset:0;z-index:20;pointer-events:none;
+  }
+  body.was-right::after{box-shadow:inset 0 0 0 16px var(--right)}
+  body.was-wrong::after{box-shadow:inset 0 0 0 16px var(--wrong)}
+
+  .corner{position:fixed;right:1.2rem;bottom:1rem;z-index:10;font-size:.9rem;color:var(--ink);
+    background:rgba(255,255,255,.7);padding:.4rem .8rem;border-radius:999px}
+  .corner:hover{background:#fff}
+
+  @media (max-aspect-ratio:1/1){
+    .pair{grid-template-columns:1fr;grid-template-rows:1fr 1fr}
+    .prompt{max-width:90vw}
+  }
+  @media (prefers-reduced-motion:reduce){
+    .wordmark::before,.wordmark::after{animation:none}
+    .flood.go{animation-duration:2.6s}
+    .card .screenbox::after{transition:none}
+  }
+</style>
+</head>
+<body>
+
+<!-- GAME -->
+<!-- START -->
+<section class="screen title-screen on" id="start">
+  <h1 class="wordmark" data-text="GG">GG</h1>
+  <p class="lede">Two videos, one is real and one is made with AI. Can you tell which is which?</p>
+  <button class="big-btn" id="startBtn">Start the game</button>
+  <p class="hint">Tap or click a video to choose it.</p>
+</section>
+
+<!-- GAME -->
+<section class="screen game" id="game">
+  <h2 class="prompt" id="prompt"><span class="step">Step 1 of 2</span>Choose the real glitch</h2>
+
+  <div class="pair" id="pair">
+    <button class="card" id="cardL" data-side="0" aria-label="Choose the left video">
+      <div class="screenbox">
+        <span class="tag you"></span>
+        <span class="tag truth"></span>
+        <video id="vidL" muted loop playsinline autoplay preload="auto"></video>
+      </div>
+      <div class="caption"><span>Left video</span><span class="key">←</span></div>
+    </button>
+    <button class="card" id="cardR" data-side="1" aria-label="Choose the right video">
+      <div class="screenbox">
+        <span class="tag you"></span>
+        <span class="tag truth"></span>
+        <video id="vidR" muted loop playsinline autoplay preload="auto"></video>
+      </div>
+      <div class="caption"><span>Right video</span><span class="key">→</span></div>
+    </button>
+  </div>
+
+  <div class="footer" id="footer"><button class="big-btn" id="nextBtn">Next pair</button></div>
+</section>
+
+<div class="flood" id="flood" aria-live="assertive"><h2 id="floodTitle"></h2><p id="floodText"></p></div>
+<button class="corner" id="fsBtn">Full screen (F)</button>
+
+<script>
+/* =====================================================================
+   YOUR VIDEOS
+   Videos live in the "videos" folder next to this page.
+   ===================================================================== */
+const CATEGORIES = {
+  glitch: {
+    realWord: "real glitch", fakeWord: "fake glitch",
+    real: ["clip06.mp4", "clip08.mp4", "clip07.mp4"],
+    fake: ["clip12.mp4", "clip01.mp4", "clip03.mp4"]
+  },
+  video: {
+    realWord: "real video", fakeWord: "fake video",
+    real: ["clip10.mp4", "clip09.mp4", "clip02.mp4"],
+    fake: ["clip11.mp4", "clip04.mp4", "clip05.mp4"]
+  }
+};
+
+/* The game never ends: it shuffles through every allowed pair, then reshuffles. */
+const ROUNDS_PER_GAME = 0;  // 0 = shuffle through every pair, then reshuffle
+
+/* Pairs that should never be shown together (too easy to tell apart). */
+const NEVER_PAIR = [
+  ["clip09.mp4",        "clip04.mp4"],   
+  ["clip10.mp4", "clip04.mp4"]    
+];
+const blocked = (a, b) => NEVER_PAIR.some(([x, y]) => (x === a && y === b) || (x === b && y === a));
+
+/* Every real video gets paired with every fake from its own category,
+   except the pairs listed in NEVER_PAIR. */
+function buildRounds(){
+  const keys = Object.keys(CATEGORIES);
+  const perCat = ROUNDS_PER_GAME > 0 ? Math.ceil(ROUNDS_PER_GAME / keys.length) : Infinity;
+  let rounds = [];
+  for (const key of keys){
+    const c = CATEGORIES[key], all = [];
+    for (const r of c.real) for (const f of c.fake) if (!blocked(r, f)) all.push({cat:key, real:r, fake:f});
+    rounds = rounds.concat(pickVaried(shuffle(all), perCat));
+  }
+  if (ROUNDS_PER_GAME > 0) rounds = shuffle(rounds).slice(0, ROUNDS_PER_GAME);
+  return orderNoRepeats(shuffle(rounds)).map(rd => ({...rd, realSide: Math.random() < .5 ? 0 : 1}));
+}
+/* Choose n pairs, favouring pairs whose videos have been used the least,
+   so every video gets screen time. */
+function pickVaried(pairs, n){
+  const used = {}, out = [], pool = pairs.slice();
+  while (out.length < n && pool.length){
+    pool.sort((a,b) => ((used[a.real]||0)+(used[a.fake]||0)) - ((used[b.real]||0)+(used[b.fake]||0)));
+    const p = pool.shift(); out.push(p);
+    used[p.real] = (used[p.real]||0) + 1; used[p.fake] = (used[p.fake]||0) + 1;
+  }
+  return out;
+}
+/* Avoid showing the same video in two pairs back to back when possible. */
+function orderNoRepeats(list){
+  const out = [], pool = list.slice();
+  while (pool.length){
+    const prev = out[out.length-1];
+    let i = prev ? pool.findIndex(p => p.real !== prev.real && p.fake !== prev.fake && p.real !== prev.fake && p.fake !== prev.real) : 0;
+    if (i < 0) i = 0;
+    out.push(pool.splice(i,1)[0]);
+  }
+  return out;
+}
+function shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; }
+
+const $ = id => document.getElementById(id);
+const cards = [$("cardL"), $("cardR")];
+const vids  = [$("vidL"), $("vidR")];
+let rounds = [], idx = 0, step = 1, pickedReal = null, busy = false, timer = null;
+
+/* Timing for walk-up use (in milliseconds) */
+const AUTO_NEXT_AFTER_ANSWER = 9000;   // answer stays up this long, then the next pair loads
+const BACK_TO_MAIN_IF_IDLE   = 45000;  // nobody has touched it this long: go back to the main screen
+
+function show(id){ document.querySelectorAll(".screen").forEach(s => s.classList.toggle("on", s.id === id)); }
+function setTimer(fn, ms){ clearTimeout(timer); timer = setTimeout(fn, ms); }
+
+/* Endless: when one shuffled batch runs out, make another, never repeating the pair just shown */
+function nextRoundData(){
+  idx++;
+  if (idx >= rounds.length){
+    const last = rounds[rounds.length - 1];
+    let fresh = buildRounds();
+    if (last && fresh.length > 1 && fresh[0].real === last.real && fresh[0].fake === last.fake){
+      fresh.push(fresh.shift());
+    }
+    rounds = fresh; idx = 0;
+  }
+}
+
+function startGame(){
+  if (!rounds.length) rounds = buildRounds(); else nextRoundData();
+  lastActivity = Date.now();
+  show("game"); loadRound();
+}
+
+function loadRound(){
+  clearTimeout(timer);
+  const rd = rounds[idx], c = CATEGORIES[rd.cat];
+  step = 1; pickedReal = null; busy = false;
+  document.body.classList.remove("was-right","was-wrong");
+  $("pair").classList.remove("revealed","locked");
+  $("footer").classList.remove("show");
+  cards.forEach(cd => cd.classList.remove("pick-real","pick-fake"));
+
+  const files = rd.realSide === 0 ? [rd.real, rd.fake] : [rd.fake, rd.real];
+  vids.forEach((v,i) => { v.src = files[i]; v.currentTime = 0; v.play().catch(()=>{}); });
+  cards.forEach((cd,i) => {
+    const t = cd.querySelector(".tag.truth"), isReal = i === rd.realSide;
+    t.textContent = isReal ? "This was real" : "This was fake";
+    t.className = "tag truth " + (isReal ? "is-real" : "is-fake");
+  });
+  setPrompt(1, "Choose the " + c.realWord);
+}
+
+function setPrompt(n, text){
+  $("prompt").innerHTML = '<span class="step">Step ' + n + ' of 2</span>' + text;
+}
+
+function choose(side){
+  if (busy) return;
+  const rd = rounds[idx], c = CATEGORIES[rd.cat];
+  if (step === 1){
+    pickedReal = side;
+    cards[side].classList.add("pick-real");
+    cards[side].querySelector(".tag.you").textContent = "You said real";
+    step = 2;
+    setPrompt(2, "Now choose the " + c.fakeWord);
+    return;
+  }
+  const pickedFake = side;
+  if (pickedFake === pickedReal) cards[side].classList.remove("pick-real");
+  cards[side].classList.add("pick-fake");
+  cards[side].querySelector(".tag.you").textContent = pickedFake === pickedReal ? "You said real and fake" : "You said fake";
+
+  const correct = pickedReal === rd.realSide && pickedFake !== rd.realSide;
+  reveal(correct, c);
+}
+
+function reveal(correct, c){
+  clearTimeout(timer);
+  busy = true;
+  $("pair").classList.add("locked");
+  const f = $("flood");
+  f.className = "flood " + (correct ? "right" : "wrong");
+  $("floodTitle").textContent = correct ? "Correct" : "Wrong";
+  $("floodText").textContent  = correct
+    ? "You spotted the " + c.realWord + " and the " + c.fakeWord + "."
+    : "The AI fooled you on this pair. Take another look.";
+  void f.offsetWidth; f.classList.add("go");
+  document.body.classList.add(correct ? "was-right" : "was-wrong");
+  setTimeout(() => {
+    $("pair").classList.add("revealed");
+    $("prompt").innerHTML = '<span class="step">The answer</span>' + (correct ? "You got it right" : "Not this time");
+    $("footer").classList.add("show");
+    setTimer(next, AUTO_NEXT_AFTER_ANSWER);
+  }, 1500);
+}
+
+function goHome(){
+  clearTimeout(timer);
+  vids.forEach(v => { v.pause(); v.removeAttribute("src"); v.load(); });
+  document.body.classList.remove("was-right","was-wrong");
+  show("start");
+}
+
+/* Return to the main screen when nobody is playing */
+let lastActivity = Date.now();
+["pointerdown","keydown"].forEach(ev => document.addEventListener(ev, () => { lastActivity = Date.now(); }, true));
+setInterval(() => {
+  if ($("game").classList.contains("on") && Date.now() - lastActivity > BACK_TO_MAIN_IF_IDLE) goHome();
+}, 1000);
+
+function next(){
+  nextRoundData();
+  loadRound();
+}
+
+cards.forEach((cd,i) => cd.addEventListener("click", () => choose(i)));
+$("nextBtn").addEventListener("click", next);
+$("startBtn").addEventListener("click", startGame);
+
+function toggleFullscreen(){
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen().catch(()=>{});
+  else document.exitFullscreen();
+}
+$("fsBtn").addEventListener("click", toggleFullscreen);
+if (!document.fullscreenEnabled) $("fsBtn").style.display = "none";
+
+document.addEventListener("keydown", e => {
+  if (e.key === "f" || e.key === "F") return toggleFullscreen();
+  const onGame = $("game").classList.contains("on");
+  if (!onGame){ if (e.key === "Enter") startGame(); return; }
+  if (!busy && e.key === "ArrowLeft")  { e.preventDefault(); choose(0); }
+  if (!busy && e.key === "ArrowRight") { e.preventDefault(); choose(1); }
+  if (busy && $("footer").classList.contains("show") && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); next(); }
+});
+
+</script>
+</body>
+</html>
