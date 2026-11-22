@@ -75,6 +75,13 @@
   .card .screenbox{position:relative;flex:1;min-height:0;background:#000;overflow:hidden}
   .card video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#000}
   .card .caption{display:none}
+  .card{cursor:pointer;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+  .card .screenbox::before{
+    content:"Loading video…";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    color:rgba(255,255,255,.7);font-size:1.1rem;z-index:0;
+  }
+  .card .screenbox.ready::before{display:none}
+  .card video{z-index:0}
   /* selection outline drawn inside the video edge */
   .card .screenbox::after{
     content:"";position:absolute;inset:0;z-index:1;pointer-events:none;
@@ -172,22 +179,22 @@
   <h2 class="prompt" id="prompt"><span class="step">Step 1 of 2</span>Choose the real glitch</h2>
 
   <div class="pair" id="pair">
-    <button class="card" id="cardL" data-side="0" aria-label="Choose the left video">
+    <div class="card" id="cardL" data-side="0" role="button" tabindex="0" aria-label="Choose the left video">
       <div class="screenbox">
         <span class="tag you"></span>
         <span class="tag truth"></span>
-        <video id="vidL" muted loop playsinline autoplay preload="auto"></video>
+        <video id="vidL" muted loop playsinline webkit-playsinline autoplay preload="auto" disablepictureinpicture></video>
       </div>
       <div class="caption"><span>Left video</span><span class="key">←</span></div>
-    </button>
-    <button class="card" id="cardR" data-side="1" aria-label="Choose the right video">
+    </div>
+    <div class="card" id="cardR" data-side="1" role="button" tabindex="0" aria-label="Choose the right video">
       <div class="screenbox">
         <span class="tag you"></span>
         <span class="tag truth"></span>
-        <video id="vidR" muted loop playsinline autoplay preload="auto"></video>
+        <video id="vidR" muted loop playsinline webkit-playsinline autoplay preload="auto" disablepictureinpicture></video>
       </div>
       <div class="caption"><span>Right video</span><span class="key">→</span></div>
-    </button>
+    </div>
   </div>
 
   <div class="footer" id="footer"><button class="big-btn" id="nextBtn">Next pair</button></div>
@@ -303,7 +310,7 @@ function loadRound(){
   cards.forEach(cd => cd.classList.remove("pick-real","pick-fake"));
 
   const files = rd.realSide === 0 ? [rd.real, rd.fake] : [rd.fake, rd.real];
-  vids.forEach((v,i) => { v.src = files[i]; v.currentTime = 0; v.play().catch(()=>{}); });
+  vids.forEach((v,i) => { v.muted = true; v.playsInline = true; v.src = files[i]; v.load(); playVideo(v); });
   cards.forEach((cd,i) => {
     const t = cd.querySelector(".tag.truth"), isReal = i === rd.realSide;
     t.textContent = isReal ? "This was real" : "This was fake";
@@ -311,6 +318,22 @@ function loadRound(){
   });
   setPrompt(1, "Choose the " + c.realWord);
 }
+
+/* iPad/iPhone Safari can refuse to start videos (for example in Low Power Mode).
+   Keep retrying, and start them on the next tap anywhere if needed. */
+function playVideo(v){
+  v.muted = true;
+  const p = v.play();
+  if (p && p.catch) p.catch(() => {});
+}
+vids.forEach(v => {
+  v.addEventListener("canplay", () => { if (v.paused) playVideo(v); });
+  v.addEventListener("loadeddata", () => v.closest(".screenbox").classList.add("ready"));
+  v.addEventListener("emptied", () => v.closest(".screenbox").classList.remove("ready"));
+});
+["touchstart","pointerdown","click"].forEach(ev => document.addEventListener(ev, () => {
+  vids.forEach(v => { if (v.paused && v.getAttribute("src")) playVideo(v); });
+}, {capture:true, passive:true}));
 
 function setPrompt(n, text){
   $("prompt").innerHTML = '<span class="step">Step ' + n + ' of 2</span>' + text;
@@ -375,7 +398,10 @@ function next(){
   loadRound();
 }
 
-cards.forEach((cd,i) => cd.addEventListener("click", () => choose(i)));
+cards.forEach((cd,i) => {
+  cd.addEventListener("click", () => choose(i));
+  cd.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); choose(i); } });
+});
 $("nextBtn").addEventListener("click", next);
 $("startBtn").addEventListener("click", startGame);
 
